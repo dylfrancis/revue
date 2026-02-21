@@ -1,29 +1,19 @@
 package main
 
 import (
-	"database/sql"
-	"fmt"
 	"log"
 
-	_ "modernc.org/sqlite"
+	"github.com/dylfrancis/revue/db"
 )
 
 func main() {
-	db, err := sql.Open("sqlite", "./app.db")
+	database, err := db.Connect("./revue.db")
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer func(db *sql.DB) {
-		err := db.Close()
-		if err != nil {
-
+	defer func() {
+		if err := database.Close(); err != nil {
+			log.Println("error closing db:", err)
 		}
-	}(db)
-
-	// verify connection works
-	if err := db.Ping(); err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println("Connected to SQLite!")
+	}()
 }
