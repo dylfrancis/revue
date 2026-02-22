@@ -15,14 +15,16 @@ import (
 )
 
 var (
-	slackClient   *slack.Client
-	signingSecret string
-	database      *sql.DB
+	slackClient         *slack.Client
+	signingSecret       string
+	githubWebhookSecret string
+	database            *sql.DB
 )
 
-func Start(port string, slackBotToken string, slackSigningSecret string, db *sql.DB) error {
+func Start(port string, slackBotToken string, slackSigningSecret string, ghWebhookSecret string, db *sql.DB) error {
 	slackClient = slack.New(slackBotToken)
 	signingSecret = slackSigningSecret
+	githubWebhookSecret = ghWebhookSecret
 	database = db
 
 	http.HandleFunc("/slack/commands", verifySlackRequest(handleSlashCommand))

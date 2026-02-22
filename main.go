@@ -34,7 +34,12 @@ func main() {
 		log.Fatal("SLACK_SIGNING_SECRET is required")
 	}
 
-	if err := server.Start("8080", slackBotToken, slackSigningSecret, database); err != nil {
+	githubWebhookSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
+	if githubWebhookSecret == "" {
+		log.Fatal("GITHUB_WEBHOOK_SECRET is required")
+	}
+
+	if err := server.Start("8080", slackBotToken, slackSigningSecret, githubWebhookSecret, database); err != nil {
 		log.Fatal(err)
 	}
 }

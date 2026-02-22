@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
+	"github.com/dylfrancis/revue/db"
 	"github.com/slack-go/slack"
 )
 
@@ -97,6 +99,97 @@ func openTrackModal(triggerID string, channelID string) error {
 	_, err := slackClient.OpenView(triggerID, modal)
 	if err != nil {
 		return fmt.Errorf("failed to open modal: %w", err)
+	}
+
+	return nil
+}
+
+// statusEmoji maps a PR status to its display emoji.
+func statusEmoji(status string) string {
+	switch status {
+	case "approved":
+		return ":white_check_mark:"
+	case "merged":
+		return ":large_green_circle:"
+	case "closed":
+		return ":black_circle:"
+	default: // "open"
+		return ":white_circle:"
+	}
+}
+
+// statusLabel maps a PR status to a human-readable label.
+func statusLabel(status string) string {
+	switch status {
+	case "approved":
+		return "approved"
+	case "merged":
+		return "merged"
+	case "closed":
+		return "closed"
+	default:
+		return "awaiting review"
+	}
+}
+
+// updateTrackerMessage fetches the current state of a tracker from the DB
+// and updates the Slack message with the latest PR statuses.
+func updateTrackerMessage(trackerID int64) error {
+	tracker, err := db.GetTrackerByID(database, trackerID)
+	if err != nil {
+		return fmt.Errorf("failed to get tracker: %w", err)
+	}
+
+	prs, err := db.GetPullRequestsByTracker(database, trackerID)
+	if err != nil {
+		return fmt.Errorf("failed to get PRs: %w", err)
+	}
+
+	// Collect all unique reviewers across all PRs
+	reviewerSet := make(map[string]bool)
+	for _, pr := range prs {
+		reviewers, err := db.GetReviewersByPR(database, pr.ID)
+		if err != nil {
+			return fmt.Errorf("failed to get reviewers: %w", err)
+		}
+		for _, uid := range reviewers {
+			reviewerSet[uid] = true
+		}
+	}
+
+	// Build the message
+	title := "*PR Tracker*"
+	if tracker.Status == "completed" {
+		title = "*PR Tracker* — :tada: All done!"
+	}
+
+	var lines []string
+	lines = append(lines, title+"\n")
+	for _, pr := range prs {
+		approvalInfo := ""
+		if pr.Status == "open" || pr.Status == "approved" {
+			approvalInfo = fmt.Sprintf(" (%d/%d approvals)", pr.ApprovalsCurrent, pr.ApprovalsRequired)
+		}
+		lines = append(lines, fmt.Sprintf("• <%s|%s/%s#%d> — %s %s%s",
+			pr.GithubPRURL, pr.GithubOwner, pr.GithubRepo, pr.GithubPRNumber,
+			statusEmoji(pr.Status), statusLabel(pr.Status), approvalInfo))
+	}
+
+	var mentions []string
+	for uid := range reviewerSet {
+		mentions = append(mentions, fmt.Sprintf("<@%s>", uid))
+	}
+	lines = append(lines, "\nReviewers: "+strings.Join(mentions, " "))
+
+	text := strings.Join(lines, "\n")
+
+	_, _, _, err = slackClient.UpdateMessage(
+		tracker.SlackChannelID,
+		tracker.SlackMessageTS,
+		slack.MsgOptionText(text, false),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update message: %w", err)
 	}
 
 	return nil
