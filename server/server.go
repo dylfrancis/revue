@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/dylfrancis/revue/db"
 	"github.com/slack-go/slack"
 )
 
@@ -108,8 +109,126 @@ func handleViewSubmission(w http.ResponseWriter, payload slack.InteractionCallba
 }
 
 // handleTrackPRSubmission processes the "Track PRs" modal submission.
-// TODO: parse PR URLs, save to DB, post summary message
+// It parses PR URLs, saves everything to the database, and posts a
+// summary message to the Slack channel.
 func handleTrackPRSubmission(w http.ResponseWriter, payload slack.InteractionCallback) {
-	log.Printf("Track PR submission from channel: %s", payload.View.PrivateMetadata)
+	channelID := payload.View.PrivateMetadata
+	values := payload.View.State.Values
+
+	// Extract PR URLs from the dynamic input fields.
+	// Each field has block_id "pr_url_block_0", "pr_url_block_1", etc.
+	// and action_id "pr_url_0", "pr_url_1", etc.
+	var prs []parsedPR
+	for i := 0; ; i++ {
+		blockID := fmt.Sprintf("pr_url_block_%d", i)
+		actionID := fmt.Sprintf("pr_url_%d", i)
+
+		block, ok := values[blockID]
+		if !ok {
+			break // no more URL fields
+		}
+
+		raw := block[actionID].Value
+		pr, err := parsePRURL(raw)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			err := json.NewEncoder(w).Encode(map[string]interface{}{
+				"response_action": "errors",
+				"errors": map[string]string{
+					blockID: err.Error(),
+				},
+			})
+			if err != nil {
+				log.Printf("Failed to encode JSON response: %v", err)
+				return
+			}
+			return
+		}
+		prs = append(prs, pr)
+	}
+
+	if len(prs) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(map[string]interface{}{
+			"response_action": "errors",
+			"errors": map[string]string{
+				"pr_url_block_0": "At least one PR URL is required",
+			},
+		})
+		if err != nil {
+			log.Printf("Failed to encode JSON response: %v", err)
+			return
+		}
+		return
+	}
+
+	reviewerIDs := values["reviewers_block"]["reviewers"].SelectedUsers
+
+	trackerID, err := db.CreateTracker(database, channelID)
+	if err != nil {
+		log.Printf("Failed to create tracker: %v", err)
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// Insert each PR and link all reviewers to it
+	for _, pr := range prs {
+		prID, err := db.CreatePullRequest(database, trackerID, pr.Owner, pr.Repo, pr.Number, pr.URL)
+		if err != nil {
+			log.Printf("Failed to create pull request: %v", err)
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
+		}
+		for _, reviewerID := range reviewerIDs {
+			if err := db.CreateReviewer(database, prID, reviewerID); err != nil {
+				log.Printf("Failed to create reviewer: %v", err)
+				http.Error(w, "Internal error", http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+
+	messageTS, err := postTrackerMessage(channelID, prs, reviewerIDs)
+	if err != nil {
+		log.Printf("Failed to post tracker message: %v", err)
+		// DB rows created but message failed — still close the modal
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Save the message timestamp so we can update this message later
+	if err := db.UpdateTrackerMessageTS(database, trackerID, messageTS); err != nil {
+		log.Printf("Failed to update tracker message TS: %v", err)
+	}
+
 	w.WriteHeader(http.StatusOK)
+}
+
+// postTrackerMessage sends a summary of tracked PRs to the Slack channel
+// and returns the message timestamp (used to update the message later).
+func postTrackerMessage(channelID string, prs []parsedPR, reviewerIDs []string) (string, error) {
+	var lines []string
+	lines = append(lines, "*PR Tracker*\n")
+	for _, pr := range prs {
+		lines = append(lines, fmt.Sprintf("• <%s|%s/%s#%d> — :white_circle: awaiting review",
+			pr.URL, pr.Owner, pr.Repo, pr.Number))
+	}
+
+	var mentions []string
+	for _, uid := range reviewerIDs {
+		mentions = append(mentions, fmt.Sprintf("<@%s>", uid))
+	}
+	lines = append(lines, "\nReviewers: "+strings.Join(mentions, " "))
+
+	text := strings.Join(lines, "\n")
+
+	_, ts, err := slackClient.PostMessage(
+		channelID,
+		slack.MsgOptionText(text, false),
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to post message: %w", err)
+	}
+
+	return ts, nil
 }
