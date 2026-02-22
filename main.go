@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/dylfrancis/revue/db"
+	"github.com/dylfrancis/revue/server"
 )
 
 func main() {
@@ -16,4 +17,8 @@ func main() {
 			log.Println("error closing db:", err)
 		}
 	}()
+
+	if err := server.Start("8080"); err != nil {
+		log.Fatal(err)
+	}
 }

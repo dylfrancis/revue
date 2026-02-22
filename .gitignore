@@ -16,6 +16,8 @@
 
 # Database file
 *.db
+*.db-shm
+*.db-wal
 
 # Dependency directories
 # vendor/
