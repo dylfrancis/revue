@@ -29,7 +29,12 @@ func main() {
 		log.Fatal("SLACK_BOT_TOKEN is required")
 	}
 
-	if err := server.Start("8080", slackBotToken, database); err != nil {
+	slackSigningSecret := os.Getenv("SLACK_SIGNING_SECRET")
+	if slackSigningSecret == "" {
+		log.Fatal("SLACK_SIGNING_SECRET is required")
+	}
+
+	if err := server.Start("8080", slackBotToken, slackSigningSecret, database); err != nil {
 		log.Fatal(err)
 	}
 }
