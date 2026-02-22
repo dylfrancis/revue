@@ -29,7 +29,7 @@ func main() {
 		log.Fatal("SLACK_BOT_TOKEN is required")
 	}
 
-	if err := server.Start("8080", slackBotToken); err != nil {
+	if err := server.Start("8080", slackBotToken, database); err != nil {
 		log.Fatal(err)
 	}
 }
