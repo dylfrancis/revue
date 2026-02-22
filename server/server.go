@@ -6,7 +6,11 @@ import (
 	"net/http"
 )
 
-func Start(port string) error {
+var botToken string
+
+func Start(port string, slackBotToken string) error {
+	botToken = slackBotToken
+
 	http.HandleFunc("/slack/commands", handleSlashCommand)
 	http.HandleFunc("/slack/interactions", handleInteraction)
 	http.HandleFunc("/github/webhooks", handleGitHubWebhook)
@@ -15,17 +19,8 @@ func Start(port string) error {
 	return http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
 }
 
-func handleSlashCommand(w http.ResponseWriter, r *http.Request) {
-	log.Println("Received slash command")
-	w.WriteHeader(http.StatusOK)
-}
-
+// TODO implement
 func handleInteraction(w http.ResponseWriter, r *http.Request) {
 	log.Println("Received interaction")
-	w.WriteHeader(http.StatusOK)
-}
-
-func handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
-	log.Println("Received GitHub webhook")
 	w.WriteHeader(http.StatusOK)
 }
