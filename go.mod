@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/golang-migrate/migrate/v4 v4.19.1
-	github.com/google/go-github/v83 v83.0.0
+	github.com/google/go-github v17.0.0+incompatible
 	github.com/joho/godotenv v1.5.1
 	github.com/slack-go/slack v0.18.0
 	modernc.org/sqlite v1.46.1

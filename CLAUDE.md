@@ -32,7 +32,7 @@ No test suite exists yet. The project has no linter configured.
 ## Key Libraries
 
 - `slack-go/slack` — Slack API client (modals, messages, signature verification)
-- `google/go-github/v83` — GitHub webhook parsing and signature verification
+- `google/go-github` — GitHub webhook parsing and signature verification
 - `modernc.org/sqlite` — Pure Go SQLite driver (no CGo, no C compiler needed)
 - `golang-migrate/migrate/v4` — Database migrations
 

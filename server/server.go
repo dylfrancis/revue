@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/dylfrancis/revue/db"
-	"github.com/google/go-github/v83/github"
+	"github.com/google/go-github/github"
 	"github.com/slack-go/slack"
 )
 

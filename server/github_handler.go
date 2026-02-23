@@ -8,7 +8,7 @@ import (
 	"net/http"
 
 	"github.com/dylfrancis/revue/db"
-	"github.com/google/go-github/v83/github"
+	"github.com/google/go-github/github"
 )
 
 func handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
