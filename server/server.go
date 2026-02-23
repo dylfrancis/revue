@@ -239,42 +239,42 @@ func handleTrackPRSubmission(w http.ResponseWriter, payload slack.InteractionCal
 	// Insert each PR, fetch its current review state, and link reviewers
 	for _, pr := range prs {
 		approvalsRequired := approvalCache[pr.Owner+"/"+pr.Repo]
-		prID, err := db.CreatePullRequest(database, trackerID, pr.Owner, pr.Repo, pr.Number, pr.URL, approvalsRequired)
+
+		// Fetch current state from GitHub (title + review state)
+		reviewState, err := fetchPRReviewState(pr.Owner, pr.Repo, pr.Number)
+		if err != nil {
+			log.Printf("Failed to fetch review state for %s/%s#%d: %v", pr.Owner, pr.Repo, pr.Number, err)
+		}
+
+		prID, err := db.CreatePullRequest(database, trackerID, pr.Owner, pr.Repo, pr.Number, pr.URL, reviewState.Title, approvalsRequired)
 		if err != nil {
 			log.Printf("Failed to create pull request: %v", err)
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 			return
 		}
 
-		// Fetch current review state from GitHub so we don't start
-		// from zero if reviews already exist
-		reviewState, err := fetchPRReviewState(pr.Owner, pr.Repo, pr.Number)
-		if err != nil {
-			log.Printf("Failed to fetch review state for %s/%s#%d: %v", pr.Owner, pr.Repo, pr.Number, err)
-		} else {
-			if reviewState.Approvals > 0 {
-				if err := db.UpdatePullRequestApprovals(database, prID, reviewState.Approvals); err != nil {
-					log.Printf("Failed to set initial approvals: %v", err)
-				}
+		if reviewState.Approvals > 0 {
+			if err := db.UpdatePullRequestApprovals(database, prID, reviewState.Approvals); err != nil {
+				log.Printf("Failed to set initial approvals: %v", err)
 			}
+		}
 
-			// Determine initial status (priority: merged > closed > changes_requested > approved)
-			var initialStatus string
-			switch {
-			case reviewState.Merged:
-				initialStatus = "merged"
-			case reviewState.Closed:
-				initialStatus = "closed"
-			case reviewState.ChangesRequested:
-				initialStatus = "changes_requested"
-			case reviewState.Approvals >= approvalsRequired:
-				initialStatus = "approved"
-			}
+		// Determine initial status (priority: merged > closed > changes_requested > approved)
+		var initialStatus string
+		switch {
+		case reviewState.Merged:
+			initialStatus = "merged"
+		case reviewState.Closed:
+			initialStatus = "closed"
+		case reviewState.ChangesRequested:
+			initialStatus = "changes_requested"
+		case reviewState.Approvals >= approvalsRequired:
+			initialStatus = "approved"
+		}
 
-			if initialStatus != "" {
-				if err := db.UpdatePullRequestStatus(database, prID, initialStatus); err != nil {
-					log.Printf("Failed to set initial status: %v", err)
-				}
+		if initialStatus != "" {
+			if err := db.UpdatePullRequestStatus(database, prID, initialStatus); err != nil {
+				log.Printf("Failed to set initial status: %v", err)
 			}
 		}
 

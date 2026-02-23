@@ -13,17 +13,18 @@ type PullRequest struct {
 	GithubRepo        string
 	GithubPRNumber    int
 	GithubPRURL       string
+	Title             string
 	Status            string
 	ApprovalsRequired int
 	ApprovalsCurrent  int
 }
 
 // CreatePullRequest inserts a pull request linked to a tracker and returns its ID.
-func CreatePullRequest(database *sql.DB, trackerID int64, owner, repo string, prNumber int, prURL string, approvalsRequired int) (int64, error) {
+func CreatePullRequest(database *sql.DB, trackerID int64, owner, repo string, prNumber int, prURL string, title string, approvalsRequired int) (int64, error) {
 	result, err := database.Exec(
-		`INSERT INTO pull_requests (tracker_id, github_owner, github_repo, github_pr_number, github_pr_url, approvals_required)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		trackerID, owner, repo, prNumber, prURL, approvalsRequired,
+		`INSERT INTO pull_requests (tracker_id, github_owner, github_repo, github_pr_number, github_pr_url, title, approvals_required)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		trackerID, owner, repo, prNumber, prURL, title, approvalsRequired,
 	)
 	if err != nil {
 		return 0, err
@@ -46,12 +47,12 @@ func FindPullRequest(database *sql.DB, owner, repo string, prNumber int) (*PullR
 	pr := &PullRequest{}
 	err := database.QueryRow(
 		`SELECT id, tracker_id, github_owner, github_repo, github_pr_number, github_pr_url,
-		        status, approvals_required, approvals_current
+		        title, status, approvals_required, approvals_current
 		 FROM pull_requests
 		 WHERE github_owner = ? AND github_repo = ? AND github_pr_number = ?`,
 		owner, repo, prNumber,
 	).Scan(&pr.ID, &pr.TrackerID, &pr.GithubOwner, &pr.GithubRepo, &pr.GithubPRNumber,
-		&pr.GithubPRURL, &pr.Status, &pr.ApprovalsRequired, &pr.ApprovalsCurrent)
+		&pr.GithubPRURL, &pr.Title, &pr.Status, &pr.ApprovalsRequired, &pr.ApprovalsCurrent)
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +64,15 @@ func UpdatePullRequestApprovals(database *sql.DB, prID int64, approvalsCurrent i
 	_, err := database.Exec(
 		"UPDATE pull_requests SET approvals_current = ? WHERE id = ?",
 		approvalsCurrent, prID,
+	)
+	return err
+}
+
+// UpdatePullRequestTitle sets the title of a PR (synced from GitHub).
+func UpdatePullRequestTitle(database *sql.DB, prID int64, title string) error {
+	_, err := database.Exec(
+		"UPDATE pull_requests SET title = ? WHERE id = ?",
+		title, prID,
 	)
 	return err
 }
@@ -80,7 +90,7 @@ func UpdatePullRequestStatus(database *sql.DB, prID int64, status string) error 
 func GetPullRequestsByTracker(database *sql.DB, trackerID int64) ([]PullRequest, error) {
 	rows, err := database.Query(
 		`SELECT id, tracker_id, github_owner, github_repo, github_pr_number, github_pr_url,
-		        status, approvals_required, approvals_current
+		        title, status, approvals_required, approvals_current
 		 FROM pull_requests WHERE tracker_id = ?`,
 		trackerID,
 	)
@@ -98,7 +108,7 @@ func GetPullRequestsByTracker(database *sql.DB, trackerID int64) ([]PullRequest,
 	for rows.Next() {
 		var pr PullRequest
 		if err := rows.Scan(&pr.ID, &pr.TrackerID, &pr.GithubOwner, &pr.GithubRepo,
-			&pr.GithubPRNumber, &pr.GithubPRURL, &pr.Status, &pr.ApprovalsRequired,
+			&pr.GithubPRNumber, &pr.GithubPRURL, &pr.Title, &pr.Status, &pr.ApprovalsRequired,
 			&pr.ApprovalsCurrent); err != nil {
 			return nil, err
 		}

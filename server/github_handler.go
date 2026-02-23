@@ -113,9 +113,7 @@ func handlePRReview(event *github.PullRequestReviewEvent) {
 // We only care about the "closed" action — GitHub uses "closed" for both
 // merges and closes, and we check the Merged field to distinguish them.
 func handlePRStateChange(event *github.PullRequestEvent) {
-	if event.GetAction() != "closed" {
-		return
-	}
+	action := event.GetAction()
 
 	pr := findTrackedPR(
 		event.GetRepo().GetOwner().GetLogin(),
@@ -123,6 +121,21 @@ func handlePRStateChange(event *github.PullRequestEvent) {
 		event.GetPullRequest().GetNumber(),
 	)
 	if pr == nil {
+		return
+	}
+
+	// Sync title on any PR event (covers renames via "edited" action)
+	if newTitle := event.GetPullRequest().GetTitle(); newTitle != "" && newTitle != pr.Title {
+		if err := db.UpdatePullRequestTitle(database, pr.ID, newTitle); err != nil {
+			log.Printf("Failed to update PR title: %v", err)
+		}
+	}
+
+	if action != "closed" {
+		// For non-close events (e.g. edited), just refresh the message
+		if err := updateTrackerMessage(pr.TrackerID); err != nil {
+			log.Printf("Failed to update tracker message: %v", err)
+		}
 		return
 	}
 
@@ -186,6 +199,7 @@ func fetchRequiredApprovals(owner, repo string) (int, error) {
 
 // prReviewState represents the current review state of a PR on GitHub.
 type prReviewState struct {
+	Title            string
 	Approvals        int
 	ChangesRequested bool
 	Merged           bool
@@ -204,6 +218,7 @@ func fetchPRReviewState(owner, repo string, prNumber int) (prReviewState, error)
 	if err != nil {
 		return state, err
 	}
+	state.Title = pr.GetTitle()
 	if pr.GetMerged() {
 		state.Merged = true
 	} else if pr.GetState() == "closed" {

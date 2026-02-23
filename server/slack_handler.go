@@ -190,8 +190,12 @@ func updateTrackerMessage(trackerID int64) error {
 		if pr.Status == "merged" || pr.Status == "closed" {
 			suffix = ""
 		}
-		lines = append(lines, fmt.Sprintf("• <%s|%s/%s#%d> — %s %s%s",
-			pr.GithubPRURL, pr.GithubOwner, pr.GithubRepo, pr.GithubPRNumber,
+		prLabel := fmt.Sprintf("%s/%s#%d", pr.GithubOwner, pr.GithubRepo, pr.GithubPRNumber)
+		if pr.Title != "" {
+			prLabel = pr.Title
+		}
+		lines = append(lines, fmt.Sprintf("• <%s|%s> — %s %s%s",
+			pr.GithubPRURL, prLabel,
 			statusEmoji(pr.Status), statusLabel(pr.Status), suffix))
 	}
 
