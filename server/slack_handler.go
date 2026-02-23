@@ -193,6 +193,9 @@ func updateTrackerMessage(trackerID int64) error {
 		prLabel := fmt.Sprintf("%s/%s#%d", pr.GithubOwner, pr.GithubRepo, pr.GithubPRNumber)
 		if pr.Title != "" {
 			prLabel = pr.Title
+			if len(prLabel) > 60 {
+				prLabel = prLabel[:57] + "..."
+			}
 		}
 		lines = append(lines, fmt.Sprintf("• <%s|%s> — %s %s%s",
 			pr.GithubPRURL, prLabel,
