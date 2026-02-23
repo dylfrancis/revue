@@ -45,6 +45,8 @@ func handleBlockAction(w http.ResponseWriter, payload slack.InteractionCallback)
 		handleAddRemovePR(payload)
 	case "edit_tracker":
 		handleEditTrackerButton(payload)
+	case "delete_tracker":
+		handleDeleteTrackerButton(payload)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -171,6 +173,33 @@ func handleEditTrackerButton(payload slack.InteractionCallback) {
 	_, err = slackClient.OpenView(payload.TriggerID, modal)
 	if err != nil {
 		log.Printf("Failed to open edit modal: %v", err)
+	}
+}
+
+// handleDeleteTrackerButton deletes a tracker and removes the Slack message.
+func handleDeleteTrackerButton(payload slack.InteractionCallback) {
+	action := payload.ActionCallback.BlockActions[0]
+	trackerID, err := strconv.ParseInt(action.Value, 10, 64)
+	if err != nil {
+		log.Printf("Invalid tracker ID in delete button: %v", err)
+		return
+	}
+
+	tracker, err := db.GetTrackerByID(database, trackerID)
+	if err != nil {
+		log.Printf("Failed to get tracker %d: %v", trackerID, err)
+		return
+	}
+
+	// Delete the Slack message
+	_, _, err = slackClient.DeleteMessage(tracker.SlackChannelID, tracker.SlackMessageTS)
+	if err != nil {
+		log.Printf("Failed to delete Slack message: %v", err)
+	}
+
+	// Delete from DB
+	if err := db.DeleteTracker(database, trackerID); err != nil {
+		log.Printf("Failed to delete tracker %d: %v", trackerID, err)
 	}
 }
 

@@ -59,6 +59,29 @@ func GetTrackerByID(database *sql.DB, trackerID int64) (*Tracker, error) {
 	return t, nil
 }
 
+// DeleteTracker removes a tracker and all its associated PRs and reviewers.
+func DeleteTracker(database *sql.DB, trackerID int64) error {
+	_, err := database.Exec(
+		"DELETE FROM reviewers WHERE pull_request_id IN (SELECT id FROM pull_requests WHERE tracker_id = ?)",
+		trackerID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to delete reviewers: %w", err)
+	}
+
+	_, err = database.Exec("DELETE FROM pull_requests WHERE tracker_id = ?", trackerID)
+	if err != nil {
+		return fmt.Errorf("failed to delete pull requests: %w", err)
+	}
+
+	_, err = database.Exec("DELETE FROM trackers WHERE id = ?", trackerID)
+	if err != nil {
+		return fmt.Errorf("failed to delete tracker: %w", err)
+	}
+
+	return nil
+}
+
 // CompleteTrackerIfDone checks if all PRs in a tracker are merged or closed.
 // If so, it marks the tracker status as "completed".
 // Returns true if the tracker was completed.

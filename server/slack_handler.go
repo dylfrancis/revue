@@ -67,33 +67,7 @@ func buildTrackModalBlocks(numURLFields int) slack.Blocks {
 		blocks = append(blocks, inputBlock)
 	}
 
-	// Action block with Add / Remove buttons
-	addBtn := slack.NewButtonBlockElement("add_pr_url", "", slack.NewTextBlockObject("plain_text", "+ Add another PR", false, false))
-	var actionElements []slack.BlockElement
-	actionElements = append(actionElements, addBtn)
-
-	if numURLFields > 1 {
-		removeBtn := slack.NewButtonBlockElement("remove_pr_url", "", slack.NewTextBlockObject("plain_text", "- Remove last", false, false)).
-			WithStyle(slack.StyleDanger)
-		actionElements = append(actionElements, removeBtn)
-	}
-
-	blocks = append(blocks, slack.NewActionBlock("pr_url_actions", actionElements...))
-
-	// Reviewers multi-user select
-	reviewerSelect := slack.NewOptionsMultiSelectBlockElement(
-		slack.MultiOptTypeUser,
-		slack.NewTextBlockObject("plain_text", "Select reviewers", false, false),
-		"reviewers",
-	)
-	reviewerBlock := slack.NewInputBlock(
-		"reviewers_block",
-		slack.NewTextBlockObject("plain_text", "Reviewers", false, false),
-		nil,
-		reviewerSelect,
-	)
-	blocks = append(blocks, reviewerBlock)
-
+	blocks = appendModalTail(blocks, numURLFields, nil)
 	return slack.Blocks{BlockSet: blocks}
 }
 
@@ -132,7 +106,14 @@ func buildEditModalBlocks(title string, prURLs []string, numURLFields int, revie
 		blocks = append(blocks, inputBlock)
 	}
 
-	// Action block with Add / Remove buttons
+	blocks = appendModalTail(blocks, numURLFields, reviewerIDs)
+	return slack.Blocks{BlockSet: blocks}
+}
+
+// appendModalTail adds the shared add/remove buttons and reviewer select
+// to the end of a modal's block list. Used by both create and edit modals.
+func appendModalTail(blocks []slack.Block, numURLFields int, initialReviewerIDs []string) []slack.Block {
+	// Add / Remove PR buttons
 	addBtn := slack.NewButtonBlockElement("add_pr_url", "", slack.NewTextBlockObject("plain_text", "+ Add another PR", false, false))
 	var actionElements []slack.BlockElement
 	actionElements = append(actionElements, addBtn)
@@ -145,14 +126,14 @@ func buildEditModalBlocks(title string, prURLs []string, numURLFields int, revie
 
 	blocks = append(blocks, slack.NewActionBlock("pr_url_actions", actionElements...))
 
-	// Reviewers multi-user select pre-filled with current reviewers
+	// Reviewers multi-user select
 	reviewerSelect := slack.NewOptionsMultiSelectBlockElement(
 		slack.MultiOptTypeUser,
 		slack.NewTextBlockObject("plain_text", "Select reviewers", false, false),
 		"reviewers",
 	)
-	if len(reviewerIDs) > 0 {
-		reviewerSelect.InitialUsers = reviewerIDs
+	if len(initialReviewerIDs) > 0 {
+		reviewerSelect.InitialUsers = initialReviewerIDs
 	}
 	reviewerBlock := slack.NewInputBlock(
 		"reviewers_block",
@@ -162,7 +143,7 @@ func buildEditModalBlocks(title string, prURLs []string, numURLFields int, revie
 	)
 	blocks = append(blocks, reviewerBlock)
 
-	return slack.Blocks{BlockSet: blocks}
+	return blocks
 }
 
 // openTrackModal opens the "Track PRs" modal with 1 URL field to start.
@@ -251,13 +232,13 @@ func buildTrackerMessageBlocks(tracker *db.Tracker, prs []db.PullRequest, review
 			}
 			prLabel = fmt.Sprintf("%s - %s", repoRef, title)
 		}
-		prLines = append(prLines, fmt.Sprintf("• <%s|%s>\n   %s %s%s\n\n",
+		prLines = append(prLines, fmt.Sprintf("• <%s|%s>\n   %s %s%s",
 			pr.GithubPRURL, prLabel,
 			statusEmoji(pr.Status), statusLabel(pr.Status), suffix))
 	}
 	if len(prLines) > 0 {
 		blocks = append(blocks, slack.NewSectionBlock(
-			slack.NewTextBlockObject("mrkdwn", strings.Join(prLines, "\n"), false, false),
+			slack.NewTextBlockObject("mrkdwn", strings.Join(prLines, "\n\n"), false, false),
 			nil, nil,
 		))
 	}
@@ -274,13 +255,12 @@ func buildTrackerMessageBlocks(tracker *db.Tracker, prs []db.PullRequest, review
 		))
 	}
 
-	// Edit button
-	editBtn := slack.NewButtonBlockElement(
-		"edit_tracker",
-		fmt.Sprintf("%d", tracker.ID),
-		slack.NewTextBlockObject("plain_text", "Edit", false, false),
-	)
-	blocks = append(blocks, slack.NewActionBlock("tracker_actions", editBtn))
+	// Edit and Delete buttons
+	trackerIDStr := fmt.Sprintf("%d", tracker.ID)
+	editBtn := slack.NewButtonBlockElement("edit_tracker", trackerIDStr, slack.NewTextBlockObject("plain_text", "Edit", false, false))
+	deleteBtn := slack.NewButtonBlockElement("delete_tracker", trackerIDStr, slack.NewTextBlockObject("plain_text", "Delete", false, false)).
+		WithStyle(slack.StyleDanger)
+	blocks = append(blocks, slack.NewActionBlock("tracker_actions", editBtn, deleteBtn))
 
 	return blocks
 }
