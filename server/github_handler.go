@@ -124,7 +124,7 @@ func handlePRStateChange(event *github.PullRequestEvent) {
 		return
 	}
 
-	// Sync title on any PR event (covers renames via "edited" action)
+	// Sync title on any PR event
 	if newTitle := event.GetPullRequest().GetTitle(); newTitle != "" && newTitle != pr.Title {
 		if err := db.UpdatePullRequestTitle(database, pr.ID, newTitle); err != nil {
 			log.Printf("Failed to update PR title: %v", err)

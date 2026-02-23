@@ -97,6 +97,74 @@ func buildTrackModalBlocks(numURLFields int) slack.Blocks {
 	return slack.Blocks{BlockSet: blocks}
 }
 
+// buildEditModalBlocks builds the Block Kit blocks for the edit modal,
+// pre-filled with existing tracker data.
+func buildEditModalBlocks(title string, prURLs []string, numURLFields int, reviewerIDs []string) slack.Blocks {
+	var blocks []slack.Block
+
+	// Title input pre-filled with current title
+	titleInput := slack.NewPlainTextInputBlockElement(
+		slack.NewTextBlockObject("plain_text", "e.g. User authentication, Bug fix for login", false, false),
+		"title",
+	)
+	titleInput.InitialValue = title
+	titleBlock := slack.NewInputBlock(
+		"title_block",
+		slack.NewTextBlockObject("plain_text", "Feature / Item", false, false),
+		nil,
+		titleInput,
+	)
+	blocks = append(blocks, titleBlock)
+
+	// One input block per URL field, pre-filled where we have existing URLs
+	for i := 0; i < numURLFields; i++ {
+		urlInput := slack.NewPlainTextInputBlockElement(
+			slack.NewTextBlockObject("plain_text", "https://github.com/owner/repo/pull/123", false, false),
+			fmt.Sprintf("pr_url_%d", i),
+		)
+		if i < len(prURLs) {
+			urlInput.InitialValue = prURLs[i]
+		}
+
+		blockID := fmt.Sprintf("pr_url_block_%d", i)
+		label := slack.NewTextBlockObject("plain_text", fmt.Sprintf("PR URL #%d", i+1), false, false)
+		inputBlock := slack.NewInputBlock(blockID, label, nil, urlInput)
+		blocks = append(blocks, inputBlock)
+	}
+
+	// Action block with Add / Remove buttons
+	addBtn := slack.NewButtonBlockElement("add_pr_url", "", slack.NewTextBlockObject("plain_text", "+ Add another PR", false, false))
+	var actionElements []slack.BlockElement
+	actionElements = append(actionElements, addBtn)
+
+	if numURLFields > 1 {
+		removeBtn := slack.NewButtonBlockElement("remove_pr_url", "", slack.NewTextBlockObject("plain_text", "- Remove last", false, false)).
+			WithStyle(slack.StyleDanger)
+		actionElements = append(actionElements, removeBtn)
+	}
+
+	blocks = append(blocks, slack.NewActionBlock("pr_url_actions", actionElements...))
+
+	// Reviewers multi-user select pre-filled with current reviewers
+	reviewerSelect := slack.NewOptionsMultiSelectBlockElement(
+		slack.MultiOptTypeUser,
+		slack.NewTextBlockObject("plain_text", "Select reviewers", false, false),
+		"reviewers",
+	)
+	if len(reviewerIDs) > 0 {
+		reviewerSelect.InitialUsers = reviewerIDs
+	}
+	reviewerBlock := slack.NewInputBlock(
+		"reviewers_block",
+		slack.NewTextBlockObject("plain_text", "Reviewers", false, false),
+		nil,
+		reviewerSelect,
+	)
+	blocks = append(blocks, reviewerBlock)
+
+	return slack.Blocks{BlockSet: blocks}
+}
+
 // openTrackModal opens the "Track PRs" modal with 1 URL field to start.
 func openTrackModal(triggerID string, channelID string) error {
 	modal := slack.ModalViewRequest{
@@ -149,6 +217,72 @@ func statusLabel(status string) string {
 	}
 }
 
+// buildTrackerMessageBlocks builds Block Kit blocks for a tracker message.
+// Includes the title, PR statuses, reviewer mentions, and an Edit button.
+func buildTrackerMessageBlocks(tracker *db.Tracker, prs []db.PullRequest, reviewerSet map[string]bool) []slack.Block {
+	var blocks []slack.Block
+
+	// Title section
+	title := fmt.Sprintf("*%s*", tracker.Title)
+	if tracker.Title == "" {
+		title = "*PR Tracker*"
+	}
+	if tracker.Status == "completed" {
+		title += " — :tada: All done!"
+	}
+	blocks = append(blocks, slack.NewSectionBlock(
+		slack.NewTextBlockObject("mrkdwn", title, false, false),
+		nil, nil,
+	))
+
+	// PR status lines
+	var prLines []string
+	for _, pr := range prs {
+		suffix := fmt.Sprintf(" (%d/%d approvals)", pr.ApprovalsCurrent, pr.ApprovalsRequired)
+		if pr.Status == "merged" || pr.Status == "closed" {
+			suffix = ""
+		}
+		prLabel := fmt.Sprintf("%s/%s#%d", pr.GithubOwner, pr.GithubRepo, pr.GithubPRNumber)
+		if pr.Title != "" {
+			prLabel = pr.Title
+			if len(prLabel) > 60 {
+				prLabel = prLabel[:57] + "..."
+			}
+		}
+		prLines = append(prLines, fmt.Sprintf("• <%s|%s> — %s %s%s",
+			pr.GithubPRURL, prLabel,
+			statusEmoji(pr.Status), statusLabel(pr.Status), suffix))
+	}
+	if len(prLines) > 0 {
+		blocks = append(blocks, slack.NewSectionBlock(
+			slack.NewTextBlockObject("mrkdwn", strings.Join(prLines, "\n"), false, false),
+			nil, nil,
+		))
+	}
+
+	// Reviewer mentions
+	var mentions []string
+	for uid := range reviewerSet {
+		mentions = append(mentions, fmt.Sprintf("<@%s>", uid))
+	}
+	if len(mentions) > 0 {
+		blocks = append(blocks, slack.NewContextBlock(
+			"",
+			slack.NewTextBlockObject("mrkdwn", "Reviewers: "+strings.Join(mentions, " "), false, false),
+		))
+	}
+
+	// Edit button
+	editBtn := slack.NewButtonBlockElement(
+		"edit_tracker",
+		fmt.Sprintf("%d", tracker.ID),
+		slack.NewTextBlockObject("plain_text", "Edit", false, false),
+	)
+	blocks = append(blocks, slack.NewActionBlock("tracker_actions", editBtn))
+
+	return blocks
+}
+
 // updateTrackerMessage fetches the current state of a tracker from the DB
 // and updates the Slack message with the latest PR statuses.
 func updateTrackerMessage(trackerID int64) error {
@@ -174,46 +308,12 @@ func updateTrackerMessage(trackerID int64) error {
 		}
 	}
 
-	// Build the message
-	title := fmt.Sprintf("*%s*", tracker.Title)
-	if tracker.Title == "" {
-		title = "*PR Tracker*"
-	}
-	if tracker.Status == "completed" {
-		title += " — :tada: All done!"
-	}
-
-	var lines []string
-	lines = append(lines, title+"\n")
-	for _, pr := range prs {
-		suffix := fmt.Sprintf(" (%d/%d approvals)", pr.ApprovalsCurrent, pr.ApprovalsRequired)
-		if pr.Status == "merged" || pr.Status == "closed" {
-			suffix = ""
-		}
-		prLabel := fmt.Sprintf("%s/%s#%d", pr.GithubOwner, pr.GithubRepo, pr.GithubPRNumber)
-		if pr.Title != "" {
-			prLabel = pr.Title
-			if len(prLabel) > 60 {
-				prLabel = prLabel[:57] + "..."
-			}
-		}
-		lines = append(lines, fmt.Sprintf("• <%s|%s> — %s %s%s",
-			pr.GithubPRURL, prLabel,
-			statusEmoji(pr.Status), statusLabel(pr.Status), suffix))
-	}
-
-	var mentions []string
-	for uid := range reviewerSet {
-		mentions = append(mentions, fmt.Sprintf("<@%s>", uid))
-	}
-	lines = append(lines, "\nReviewers: "+strings.Join(mentions, " "))
-
-	text := strings.Join(lines, "\n")
+	blocks := buildTrackerMessageBlocks(tracker, prs, reviewerSet)
 
 	_, _, _, err = slackClient.UpdateMessage(
 		tracker.SlackChannelID,
 		tracker.SlackMessageTS,
-		slack.MsgOptionText(text, false),
+		slack.MsgOptionBlocks(blocks...),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update message: %w", err)

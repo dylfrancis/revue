@@ -41,6 +41,22 @@ func CreateReviewer(database *sql.DB, pullRequestID int64, slackUserID string) e
 	return err
 }
 
+// DeletePullRequest removes a PR and its associated reviewers.
+func DeletePullRequest(database *sql.DB, prID int64) error {
+	_, err := database.Exec("DELETE FROM reviewers WHERE pull_request_id = ?", prID)
+	if err != nil {
+		return err
+	}
+	_, err = database.Exec("DELETE FROM pull_requests WHERE id = ?", prID)
+	return err
+}
+
+// DeleteReviewersByPR removes all reviewers for a pull request.
+func DeleteReviewersByPR(database *sql.DB, prID int64) error {
+	_, err := database.Exec("DELETE FROM reviewers WHERE pull_request_id = ?", prID)
+	return err
+}
+
 // FindPullRequest looks up a tracked PR by its GitHub identifiers.
 // Returns sql.ErrNoRows if the PR is not being tracked.
 func FindPullRequest(database *sql.DB, owner, repo string, prNumber int) (*PullRequest, error) {

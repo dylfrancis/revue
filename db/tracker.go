@@ -37,6 +37,15 @@ func UpdateTrackerMessageTS(database *sql.DB, trackerID int64, messageTS string)
 	return err
 }
 
+// UpdateTrackerTitle sets the title on a tracker.
+func UpdateTrackerTitle(database *sql.DB, trackerID int64, title string) error {
+	_, err := database.Exec(
+		"UPDATE trackers SET title = ? WHERE id = ?",
+		title, trackerID,
+	)
+	return err
+}
+
 // GetTrackerByID fetches a single tracker row.
 func GetTrackerByID(database *sql.DB, trackerID int64) (*Tracker, error) {
 	t := &Tracker{}
