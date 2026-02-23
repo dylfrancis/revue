@@ -228,7 +228,7 @@ func buildTrackerMessageBlocks(tracker *db.Tracker, prs []db.PullRequest, review
 		title = "*PR Tracker*"
 	}
 	if tracker.Status == "completed" {
-		title += " — :tada: All done!"
+		title += " - :tada: All done!"
 	}
 	blocks = append(blocks, slack.NewSectionBlock(
 		slack.NewTextBlockObject("mrkdwn", title, false, false),
@@ -242,14 +242,16 @@ func buildTrackerMessageBlocks(tracker *db.Tracker, prs []db.PullRequest, review
 		if pr.Status == "merged" || pr.Status == "closed" {
 			suffix = ""
 		}
-		prLabel := fmt.Sprintf("%s/%s#%d", pr.GithubOwner, pr.GithubRepo, pr.GithubPRNumber)
+		repoRef := fmt.Sprintf("%s/%s#%d", pr.GithubOwner, pr.GithubRepo, pr.GithubPRNumber)
+		prLabel := repoRef
 		if pr.Title != "" {
-			prLabel = pr.Title
-			if len(prLabel) > 60 {
-				prLabel = prLabel[:57] + "..."
+			title := pr.Title
+			if len(title) > 50 {
+				title = title[:47] + "..."
 			}
+			prLabel = fmt.Sprintf("%s - %s", repoRef, title)
 		}
-		prLines = append(prLines, fmt.Sprintf("• <%s|%s> — %s %s%s",
+		prLines = append(prLines, fmt.Sprintf("• <%s|%s> | %s %s%s",
 			pr.GithubPRURL, prLabel,
 			statusEmoji(pr.Status), statusLabel(pr.Status), suffix))
 	}

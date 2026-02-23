@@ -32,7 +32,7 @@ func handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Type switch — Go's way of handling polymorphism. ParseWebHook returns
+	// Type switch - Go's way of handling polymorphism. ParseWebHook returns
 	// interface{}, and we switch on the concrete type to handle each event.
 	switch e := event.(type) {
 	case *github.PullRequestReviewEvent:
@@ -110,7 +110,7 @@ func handlePRReview(event *github.PullRequestReviewEvent) {
 }
 
 // handlePRStateChange processes pull_request events (opened, closed, merged, etc.).
-// We only care about the "closed" action — GitHub uses "closed" for both
+// We only care about the "closed" action - GitHub uses "closed" for both
 // merges and closes, and we check the Merged field to distinguish them.
 func handlePRStateChange(event *github.PullRequestEvent) {
 	action := event.GetAction()
@@ -154,7 +154,7 @@ func handlePRStateChange(event *github.PullRequestEvent) {
 		log.Printf("Failed to check tracker completion: %v", err)
 	}
 	if completed {
-		log.Printf("Tracker %d completed — all PRs merged/closed", pr.TrackerID)
+		log.Printf("Tracker %d completed - all PRs merged/closed", pr.TrackerID)
 	}
 
 	if err := updateTrackerMessage(pr.TrackerID); err != nil {
@@ -180,7 +180,7 @@ func fetchRequiredApprovals(owner, repo string) (int, error) {
 	}
 
 	// Fetch branch protection rules for the default branch.
-	// Returns 404 if no branch protection is configured — we default to 1.
+	// Returns 404 if no branch protection is configured - we default to 1.
 	protection, _, err := githubClient.Repositories.GetBranchProtection(ctx, owner, repo, defaultBranch)
 	if err != nil {
 		var ghErr *github.ErrorResponse
@@ -207,7 +207,7 @@ type prReviewState struct {
 }
 
 // fetchPRReviewState fetches all reviews on a PR and computes the current
-// state. GitHub can have multiple reviews per user — we take the latest
+// state. GitHub can have multiple reviews per user - we take the latest
 // review per user to determine the current state.
 func fetchPRReviewState(owner, repo string, prNumber int) (prReviewState, error) {
 	ctx := context.Background()
@@ -233,7 +233,7 @@ func fetchPRReviewState(owner, repo string, prNumber int) (prReviewState, error)
 	}
 
 	// Track the latest review state per user.
-	// A user can review multiple times — only the most recent matters.
+	// A user can review multiple times - only the most recent matters.
 	latestByUser := make(map[string]string)
 	for _, review := range reviews {
 		user := review.GetUser().GetLogin()

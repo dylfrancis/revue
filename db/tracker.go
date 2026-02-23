@@ -15,7 +15,7 @@ type Tracker struct {
 }
 
 // CreateTracker inserts a new tracker row and returns its ID.
-// The slack_message_ts starts empty — we update it after posting to Slack.
+// The slack_message_ts starts empty - we update it after posting to Slack.
 func CreateTracker(database *sql.DB, channelID string, title string) (int64, error) {
 	result, err := database.Exec(
 		"INSERT INTO trackers (slack_channel_id, slack_message_ts, title) VALUES (?, ?, ?)",

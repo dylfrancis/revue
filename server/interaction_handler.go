@@ -320,7 +320,7 @@ func handleTrackPRSubmission(w http.ResponseWriter, payload slack.InteractionCal
 	messageTS, err := postTrackerMessage(channelID, title)
 	if err != nil {
 		log.Printf("Failed to post tracker message: %v", err)
-		// DB rows created but message failed — still close the modal
+		// DB rows created but message failed - still close the modal
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -345,7 +345,7 @@ func handleTrackPRSubmission(w http.ResponseWriter, payload slack.InteractionCal
 func postTrackerMessage(channelID string, title string) (string, error) {
 	_, ts, err := slackClient.PostMessage(
 		channelID,
-		slack.MsgOptionText(fmt.Sprintf("*%s* — loading...", title), false),
+		slack.MsgOptionText(fmt.Sprintf("*%s* - loading...", title), false),
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to post message: %w", err)

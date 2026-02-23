@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is Revue?
 
-Revue is a self-hosted bot that tracks pull request reviews across GitHub and Slack. It receives GitHub webhooks for PR activity and uses Slack Block Kit for interactive modals and messaging. Designed for single-binary deployment on a VPS with SQLite — no external database or services needed.
+Revue is a self-hosted bot that tracks pull request reviews across GitHub and Slack. It receives GitHub webhooks for PR activity and uses Slack Block Kit for interactive modals and messaging. Designed for single-binary deployment on a VPS with SQLite - no external database or services needed.
 
 ## Commands
 
@@ -18,31 +18,31 @@ No test suite exists yet. The project has no linter configured.
 
 ## Architecture
 
-- **`main.go`** — Entry point. Loads `.env`, connects to DB, starts HTTP server on port 8080.
-- **`server/`** — HTTP handlers split by concern:
-  - `server.go` — Route registration, `Start()`, Slack request verification middleware, interaction dispatch, tracker message posting/updating
-  - `slack_handler.go` — Slash command handling, Block Kit modal building (dynamic add/remove PR fields), `updateTrackerMessage()`
-  - `github_handler.go` — GitHub webhook verification (HMAC-SHA256), event parsing via go-github, handles `pull_request_review` and `pull_request` events
-  - `parse.go` — PR URL parser (extracts owner/repo/number from GitHub URLs)
-- **`db/`** — SQLite connection with WAL mode and auto-migrations using `golang-migrate`.
-  - `db.go` — Connection setup and migration runner
-  - `tracker.go` — Tracker CRUD and completion logic
-  - `pull_request.go` — PR and reviewer CRUD, queries by GitHub identifiers
+- **`main.go`** - Entry point. Loads `.env`, connects to DB, starts HTTP server on port 8080.
+- **`server/`** - HTTP handlers split by concern:
+  - `server.go` - Route registration, `Start()`, Slack request verification middleware, interaction dispatch, tracker message posting/updating
+  - `slack_handler.go` - Slash command handling, Block Kit modal building (dynamic add/remove PR fields), `updateTrackerMessage()`
+  - `github_handler.go` - GitHub webhook verification (HMAC-SHA256), event parsing via go-github, handles `pull_request_review` and `pull_request` events
+  - `parse.go` - PR URL parser (extracts owner/repo/number from GitHub URLs)
+- **`db/`** - SQLite connection with WAL mode and auto-migrations using `golang-migrate`.
+  - `db.go` - Connection setup and migration runner
+  - `tracker.go` - Tracker CRUD and completion logic
+  - `pull_request.go` - PR and reviewer CRUD, queries by GitHub identifiers
 
 ## Key Libraries
 
-- `slack-go/slack` — Slack API client (modals, messages, signature verification)
-- `google/go-github` — GitHub webhook parsing and signature verification
-- `modernc.org/sqlite` — Pure Go SQLite driver (no CGo, no C compiler needed)
-- `golang-migrate/migrate/v4` — Database migrations
+- `slack-go/slack` - Slack API client (modals, messages, signature verification)
+- `google/go-github` - GitHub webhook parsing and signature verification
+- `modernc.org/sqlite` - Pure Go SQLite driver (no CGo, no C compiler needed)
+- `golang-migrate/migrate/v4` - Database migrations
 
 ## Environment Variables (.env)
 
-All required — app fatals on startup if missing:
-- `SLACK_BOT_TOKEN` — Slack bot OAuth token (xoxb-...)
-- `SLACK_SIGNING_SECRET` — Slack app signing secret for request verification
-- `GITHUB_TOKEN` — GitHub personal access token for API access
-- `GITHUB_WEBHOOK_SECRET` — Secret for verifying GitHub webhook signatures
+All required - app fatals on startup if missing:
+- `SLACK_BOT_TOKEN` - Slack bot OAuth token (xoxb-...)
+- `SLACK_SIGNING_SECRET` - Slack app signing secret for request verification
+- `GITHUB_TOKEN` - GitHub personal access token for API access
+- `GITHUB_WEBHOOK_SECRET` - Secret for verifying GitHub webhook signatures
 
 ## Key Details
 
