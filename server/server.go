@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/dylfrancis/revue/db"
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v83/github"
 	"github.com/slack-go/slack"
 )
 
@@ -258,21 +258,21 @@ func handleTrackPRSubmission(w http.ResponseWriter, payload slack.InteractionCal
 				}
 			}
 
-			// Set status based on priority: merged > closed > changes_requested > approved
-			if reviewState.Merged {
-				if err := db.UpdatePullRequestStatus(database, prID, "merged"); err != nil {
-					log.Printf("Failed to set initial status: %v", err)
-				}
-			} else if reviewState.Closed {
-				if err := db.UpdatePullRequestStatus(database, prID, "closed"); err != nil {
-					log.Printf("Failed to set initial status: %v", err)
-				}
-			} else if reviewState.ChangesRequested {
-				if err := db.UpdatePullRequestStatus(database, prID, "changes_requested"); err != nil {
-					log.Printf("Failed to set initial status: %v", err)
-				}
-			} else if reviewState.Approvals >= approvalsRequired {
-				if err := db.UpdatePullRequestStatus(database, prID, "approved"); err != nil {
+			// Determine initial status (priority: merged > closed > changes_requested > approved)
+			var initialStatus string
+			switch {
+			case reviewState.Merged:
+				initialStatus = "merged"
+			case reviewState.Closed:
+				initialStatus = "closed"
+			case reviewState.ChangesRequested:
+				initialStatus = "changes_requested"
+			case reviewState.Approvals >= approvalsRequired:
+				initialStatus = "approved"
+			}
+
+			if initialStatus != "" {
+				if err := db.UpdatePullRequestStatus(database, prID, initialStatus); err != nil {
 					log.Printf("Failed to set initial status: %v", err)
 				}
 			}

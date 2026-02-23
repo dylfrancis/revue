@@ -41,6 +41,7 @@ No test suite exists yet. The project has no linter configured.
 All required — app fatals on startup if missing:
 - `SLACK_BOT_TOKEN` — Slack bot OAuth token (xoxb-...)
 - `SLACK_SIGNING_SECRET` — Slack app signing secret for request verification
+- `GITHUB_TOKEN` — GitHub personal access token for API access
 - `GITHUB_WEBHOOK_SECRET` — Secret for verifying GitHub webhook signatures
 
 ## Key Details
