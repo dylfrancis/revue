@@ -41,6 +41,19 @@ func handleSlashCommand(w http.ResponseWriter, r *http.Request) {
 func buildTrackModalBlocks(numURLFields int) slack.Blocks {
 	var blocks []slack.Block
 
+	// Title input for the feature/item being worked on
+	titleInput := slack.NewPlainTextInputBlockElement(
+		slack.NewTextBlockObject("plain_text", "e.g. User authentication, Bug fix for login", false, false),
+		"title",
+	)
+	titleBlock := slack.NewInputBlock(
+		"title_block",
+		slack.NewTextBlockObject("plain_text", "Feature / Item", false, false),
+		nil,
+		titleInput,
+	)
+	blocks = append(blocks, titleBlock)
+
 	// One input block per URL field
 	for i := 0; i < numURLFields; i++ {
 		urlInput := slack.NewPlainTextInputBlockElement(
@@ -109,10 +122,12 @@ func statusEmoji(status string) string {
 	switch status {
 	case "approved":
 		return ":white_check_mark:"
+	case "changes_requested":
+		return ":x:"
 	case "merged":
-		return ":large_green_circle:"
+		return ":purple_circle:"
 	case "closed":
-		return ":black_circle:"
+		return ":red_circle:"
 	default: // "open"
 		return ":white_circle:"
 	}
@@ -123,6 +138,8 @@ func statusLabel(status string) string {
 	switch status {
 	case "approved":
 		return "approved"
+	case "changes_requested":
+		return "changes requested"
 	case "merged":
 		return "merged"
 	case "closed":
@@ -158,21 +175,24 @@ func updateTrackerMessage(trackerID int64) error {
 	}
 
 	// Build the message
-	title := "*PR Tracker*"
+	title := fmt.Sprintf("*%s*", tracker.Title)
+	if tracker.Title == "" {
+		title = "*PR Tracker*"
+	}
 	if tracker.Status == "completed" {
-		title = "*PR Tracker* — :tada: All done!"
+		title += " — :tada: All done!"
 	}
 
 	var lines []string
 	lines = append(lines, title+"\n")
 	for _, pr := range prs {
-		approvalInfo := ""
-		if pr.Status == "open" || pr.Status == "approved" {
-			approvalInfo = fmt.Sprintf(" (%d/%d approvals)", pr.ApprovalsCurrent, pr.ApprovalsRequired)
+		suffix := fmt.Sprintf(" (%d/%d approvals)", pr.ApprovalsCurrent, pr.ApprovalsRequired)
+		if pr.Status == "merged" || pr.Status == "closed" {
+			suffix = ""
 		}
 		lines = append(lines, fmt.Sprintf("• <%s|%s/%s#%d> — %s %s%s",
 			pr.GithubPRURL, pr.GithubOwner, pr.GithubRepo, pr.GithubPRNumber,
-			statusEmoji(pr.Status), statusLabel(pr.Status), approvalInfo))
+			statusEmoji(pr.Status), statusLabel(pr.Status), suffix))
 	}
 
 	var mentions []string

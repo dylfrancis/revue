@@ -19,11 +19,11 @@ type PullRequest struct {
 }
 
 // CreatePullRequest inserts a pull request linked to a tracker and returns its ID.
-func CreatePullRequest(database *sql.DB, trackerID int64, owner, repo string, prNumber int, prURL string) (int64, error) {
+func CreatePullRequest(database *sql.DB, trackerID int64, owner, repo string, prNumber int, prURL string, approvalsRequired int) (int64, error) {
 	result, err := database.Exec(
-		`INSERT INTO pull_requests (tracker_id, github_owner, github_repo, github_pr_number, github_pr_url)
-		 VALUES (?, ?, ?, ?, ?)`,
-		trackerID, owner, repo, prNumber, prURL,
+		`INSERT INTO pull_requests (tracker_id, github_owner, github_repo, github_pr_number, github_pr_url, approvals_required)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		trackerID, owner, repo, prNumber, prURL, approvalsRequired,
 	)
 	if err != nil {
 		return 0, err

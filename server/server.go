@@ -11,18 +11,21 @@ import (
 	"strings"
 
 	"github.com/dylfrancis/revue/db"
+	"github.com/google/go-github/v83/github"
 	"github.com/slack-go/slack"
 )
 
 var (
 	slackClient         *slack.Client
+	githubClient        *github.Client
 	signingSecret       string
 	githubWebhookSecret string
 	database            *sql.DB
 )
 
-func Start(port string, slackBotToken string, slackSigningSecret string, ghWebhookSecret string, db *sql.DB) error {
+func Start(port string, slackBotToken string, slackSigningSecret string, ghWebhookSecret string, ghToken string, db *sql.DB) error {
 	slackClient = slack.New(slackBotToken)
+	githubClient = github.NewClient(nil).WithAuthToken(ghToken)
 	signingSecret = slackSigningSecret
 	githubWebhookSecret = ghWebhookSecret
 	database = db
@@ -107,7 +110,7 @@ func handleBlockAction(w http.ResponseWriter, payload slack.InteractionCallback)
 	switch action.ActionID {
 	case "add_pr_url", "remove_pr_url":
 		// Count current URL fields by looking at block IDs in the existing view.
-		// Our URL blocks are named "pr_url_block_0", "pr_url_block_1", etc.
+		// URL blocks are named "pr_url_block_0", "pr_url_block_1", etc.
 		numURLFields := 0
 		for _, block := range payload.View.Blocks.BlockSet {
 			if strings.HasPrefix(block.ID(), "pr_url_block_") {
@@ -133,7 +136,7 @@ func handleBlockAction(w http.ResponseWriter, payload slack.InteractionCallback)
 		}
 
 		// UpdateView replaces the current modal content in-place.
-		// We pass the view ID so Slack knows which modal to update.
+		// Pass the view ID so Slack knows which modal to update.
 		_, err := slackClient.UpdateView(modal, "", "", payload.View.ID)
 		if err != nil {
 			log.Printf("Failed to update view: %v", err)
@@ -208,23 +211,73 @@ func handleTrackPRSubmission(w http.ResponseWriter, payload slack.InteractionCal
 		return
 	}
 
+	title := values["title_block"]["title"].Value
 	reviewerIDs := values["reviewers_block"]["reviewers"].SelectedUsers
 
-	trackerID, err := db.CreateTracker(database, channelID)
+	trackerID, err := db.CreateTracker(database, channelID, title)
 	if err != nil {
 		log.Printf("Failed to create tracker: %v", err)
 		http.Error(w, "Internal error", http.StatusInternalServerError)
 		return
 	}
 
-	// Insert each PR and link all reviewers to it
+	// Fetch required approvals per repo (cache to avoid duplicate API calls
+	// when multiple PRs are from the same repo)
+	approvalCache := make(map[string]int)
 	for _, pr := range prs {
-		prID, err := db.CreatePullRequest(database, trackerID, pr.Owner, pr.Repo, pr.Number, pr.URL)
+		key := pr.Owner + "/" + pr.Repo
+		if _, exists := approvalCache[key]; !exists {
+			required, err := fetchRequiredApprovals(pr.Owner, pr.Repo)
+			if err != nil {
+				log.Printf("Failed to fetch approvals for %s: %v (defaulting to 1)", key, err)
+				required = 1
+			}
+			approvalCache[key] = required
+		}
+	}
+
+	// Insert each PR, fetch its current review state, and link reviewers
+	for _, pr := range prs {
+		approvalsRequired := approvalCache[pr.Owner+"/"+pr.Repo]
+		prID, err := db.CreatePullRequest(database, trackerID, pr.Owner, pr.Repo, pr.Number, pr.URL, approvalsRequired)
 		if err != nil {
 			log.Printf("Failed to create pull request: %v", err)
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 			return
 		}
+
+		// Fetch current review state from GitHub so we don't start
+		// from zero if reviews already exist
+		reviewState, err := fetchPRReviewState(pr.Owner, pr.Repo, pr.Number)
+		if err != nil {
+			log.Printf("Failed to fetch review state for %s/%s#%d: %v", pr.Owner, pr.Repo, pr.Number, err)
+		} else {
+			if reviewState.Approvals > 0 {
+				if err := db.UpdatePullRequestApprovals(database, prID, reviewState.Approvals); err != nil {
+					log.Printf("Failed to set initial approvals: %v", err)
+				}
+			}
+
+			// Set status based on priority: merged > closed > changes_requested > approved
+			if reviewState.Merged {
+				if err := db.UpdatePullRequestStatus(database, prID, "merged"); err != nil {
+					log.Printf("Failed to set initial status: %v", err)
+				}
+			} else if reviewState.Closed {
+				if err := db.UpdatePullRequestStatus(database, prID, "closed"); err != nil {
+					log.Printf("Failed to set initial status: %v", err)
+				}
+			} else if reviewState.ChangesRequested {
+				if err := db.UpdatePullRequestStatus(database, prID, "changes_requested"); err != nil {
+					log.Printf("Failed to set initial status: %v", err)
+				}
+			} else if reviewState.Approvals >= approvalsRequired {
+				if err := db.UpdatePullRequestStatus(database, prID, "approved"); err != nil {
+					log.Printf("Failed to set initial status: %v", err)
+				}
+			}
+		}
+
 		for _, reviewerID := range reviewerIDs {
 			if err := db.CreateReviewer(database, prID, reviewerID); err != nil {
 				log.Printf("Failed to create reviewer: %v", err)
@@ -234,7 +287,7 @@ func handleTrackPRSubmission(w http.ResponseWriter, payload slack.InteractionCal
 		}
 	}
 
-	messageTS, err := postTrackerMessage(channelID, prs, reviewerIDs)
+	messageTS, err := postTrackerMessage(channelID, title, prs, approvalCache, reviewerIDs)
 	if err != nil {
 		log.Printf("Failed to post tracker message: %v", err)
 		// DB rows created but message failed — still close the modal
@@ -247,17 +300,24 @@ func handleTrackPRSubmission(w http.ResponseWriter, payload slack.InteractionCal
 		log.Printf("Failed to update tracker message TS: %v", err)
 	}
 
+	// Immediately refresh the message with actual DB state
+	// (accounts for pre-existing reviews fetched above)
+	if err := updateTrackerMessage(trackerID); err != nil {
+		log.Printf("Failed to refresh tracker message: %v", err)
+	}
+
 	w.WriteHeader(http.StatusOK)
 }
 
 // postTrackerMessage sends a summary of tracked PRs to the Slack channel
 // and returns the message timestamp (used to update the message later).
-func postTrackerMessage(channelID string, prs []parsedPR, reviewerIDs []string) (string, error) {
+func postTrackerMessage(channelID string, title string, prs []parsedPR, approvalCache map[string]int, reviewerIDs []string) (string, error) {
 	var lines []string
-	lines = append(lines, "*PR Tracker*\n")
+	lines = append(lines, fmt.Sprintf("*%s*\n", title))
 	for _, pr := range prs {
-		lines = append(lines, fmt.Sprintf("• <%s|%s/%s#%d> — :white_circle: awaiting review",
-			pr.URL, pr.Owner, pr.Repo, pr.Number))
+		required := approvalCache[pr.Owner+"/"+pr.Repo]
+		lines = append(lines, fmt.Sprintf("• <%s|%s/%s#%d> — :white_circle: awaiting review (0/%d approvals)",
+			pr.URL, pr.Owner, pr.Repo, pr.Number, required))
 	}
 
 	var mentions []string
