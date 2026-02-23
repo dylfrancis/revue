@@ -162,13 +162,13 @@ func handlePRStateChange(event *github.PullRequestEvent) {
 	}
 }
 
-// fetchRequiredApprovals queries the GitHub API for the branch protection
-// rules on a repo's default branch and returns the required number of
-// approving reviews. Returns 1 if no branch protection is configured.
+// fetchRequiredApprovals queries GitHub for the required number of approving
+// reviews on a repo's default branch. Checks both rulesets (newer) and branch
+// protection rules (older). Returns 1 if neither is configured.
 func fetchRequiredApprovals(owner, repo string) (int, error) {
 	ctx := context.Background()
 
-	// First, get the repo to find its default branch name
+	// Get the repo to find its default branch name
 	repoInfo, _, err := githubClient.Repositories.Get(ctx, owner, repo)
 	if err != nil {
 		return 1, err
@@ -179,8 +179,23 @@ func fetchRequiredApprovals(owner, repo string) (int, error) {
 		return 1, nil
 	}
 
-	// Fetch branch protection rules for the default branch.
-	// Returns 404 if no branch protection is configured - we default to 1.
+	// Try GetRulesForBranch first — this returns effective rules from both
+	// rulesets and branch protection, so it covers both systems.
+	branchRules, _, err := githubClient.Repositories.GetRulesForBranch(ctx, owner, repo, defaultBranch, &github.ListOptions{PerPage: 100})
+	if err == nil && branchRules != nil && len(branchRules.PullRequest) > 0 {
+		// Take the highest required count across all matching rules
+		maxRequired := 0
+		for _, rule := range branchRules.PullRequest {
+			if rule.Parameters.RequiredApprovingReviewCount > maxRequired {
+				maxRequired = rule.Parameters.RequiredApprovingReviewCount
+			}
+		}
+		if maxRequired > 0 {
+			return maxRequired, nil
+		}
+	}
+
+	// Fallback to branch protection API for older repos
 	protection, _, err := githubClient.Repositories.GetBranchProtection(ctx, owner, repo, defaultBranch)
 	if err != nil {
 		var ghErr *github.ErrorResponse

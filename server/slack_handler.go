@@ -251,7 +251,7 @@ func buildTrackerMessageBlocks(tracker *db.Tracker, prs []db.PullRequest, review
 			}
 			prLabel = fmt.Sprintf("%s - %s", repoRef, title)
 		}
-		prLines = append(prLines, fmt.Sprintf("• <%s|%s> | %s %s%s",
+		prLines = append(prLines, fmt.Sprintf("• <%s|%s>\n   %s %s%s\n\n",
 			pr.GithubPRURL, prLabel,
 			statusEmoji(pr.Status), statusLabel(pr.Status), suffix))
 	}
