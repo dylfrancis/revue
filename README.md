@@ -27,6 +27,8 @@ go run main.go
 
 The app will create a `revue.db` SQLite database and run migrations automatically on startup.
 
+Update for test
+
 ## License
 
 MIT
