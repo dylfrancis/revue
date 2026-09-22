@@ -39,7 +39,12 @@ func main() {
 		log.Fatal("GITHUB_WEBHOOK_SECRET is required")
 	}
 
-	if err := server.Start("8080", slackBotToken, slackSigningSecret, githubWebhookSecret, database); err != nil {
+	githubToken := os.Getenv("GITHUB_TOKEN")
+	if githubToken == "" {
+		log.Fatal("GITHUB_TOKEN is required")
+	}
+
+	if err := server.Start("8080", slackBotToken, slackSigningSecret, githubWebhookSecret, githubToken, database); err != nil {
 		log.Fatal(err)
 	}
 }

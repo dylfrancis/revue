@@ -4,11 +4,11 @@ A self-hosted, open-source bot written in Go that helps teams track pull request
 
 ## Tech Stack
 
-- **Go** — single binary distribution
-- **SQLite** (WAL mode) — local state via `modernc.org/sqlite` (pure Go, no CGo)
-- **Slack Block Kit** — modals + interactive messaging
-- **GitHub Webhooks + REST API** — real-time PR activity
-- **Docker + Docker Compose** — self-hosting
+- **Go** - single binary distribution
+- **SQLite** (WAL mode) - local state via `modernc.org/sqlite` (pure Go, no CGo)
+- **Slack Block Kit** - modals + interactive messaging
+- **GitHub Webhooks + REST API** - real-time PR activity
+- **Docker + Docker Compose** - self-hosting
 
 ## Getting Started
 

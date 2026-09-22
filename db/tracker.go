@@ -11,14 +11,15 @@ type Tracker struct {
 	SlackChannelID string
 	SlackMessageTS string
 	Status         string
+	Title          string
 }
 
 // CreateTracker inserts a new tracker row and returns its ID.
-// The slack_message_ts starts empty — we update it after posting to Slack.
-func CreateTracker(database *sql.DB, channelID string) (int64, error) {
+// The slack_message_ts starts empty - we update it after posting to Slack.
+func CreateTracker(database *sql.DB, channelID string, title string) (int64, error) {
 	result, err := database.Exec(
-		"INSERT INTO trackers (slack_channel_id, slack_message_ts) VALUES (?, ?)",
-		channelID, "",
+		"INSERT INTO trackers (slack_channel_id, slack_message_ts, title) VALUES (?, ?, ?)",
+		channelID, "", title,
 	)
 	if err != nil {
 		return 0, err
@@ -36,17 +37,49 @@ func UpdateTrackerMessageTS(database *sql.DB, trackerID int64, messageTS string)
 	return err
 }
 
+// UpdateTrackerTitle sets the title on a tracker.
+func UpdateTrackerTitle(database *sql.DB, trackerID int64, title string) error {
+	_, err := database.Exec(
+		"UPDATE trackers SET title = ? WHERE id = ?",
+		title, trackerID,
+	)
+	return err
+}
+
 // GetTrackerByID fetches a single tracker row.
 func GetTrackerByID(database *sql.DB, trackerID int64) (*Tracker, error) {
 	t := &Tracker{}
 	err := database.QueryRow(
-		"SELECT id, slack_channel_id, slack_message_ts, status FROM trackers WHERE id = ?",
+		"SELECT id, slack_channel_id, slack_message_ts, status, title FROM trackers WHERE id = ?",
 		trackerID,
-	).Scan(&t.ID, &t.SlackChannelID, &t.SlackMessageTS, &t.Status)
+	).Scan(&t.ID, &t.SlackChannelID, &t.SlackMessageTS, &t.Status, &t.Title)
 	if err != nil {
 		return nil, err
 	}
 	return t, nil
+}
+
+// DeleteTracker removes a tracker and all its associated PRs and reviewers.
+func DeleteTracker(database *sql.DB, trackerID int64) error {
+	_, err := database.Exec(
+		"DELETE FROM reviewers WHERE pull_request_id IN (SELECT id FROM pull_requests WHERE tracker_id = ?)",
+		trackerID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to delete reviewers: %w", err)
+	}
+
+	_, err = database.Exec("DELETE FROM pull_requests WHERE tracker_id = ?", trackerID)
+	if err != nil {
+		return fmt.Errorf("failed to delete pull requests: %w", err)
+	}
+
+	_, err = database.Exec("DELETE FROM trackers WHERE id = ?", trackerID)
+	if err != nil {
+		return fmt.Errorf("failed to delete tracker: %w", err)
+	}
+
+	return nil
 }
 
 // CompleteTrackerIfDone checks if all PRs in a tracker are merged or closed.
